@@ -1,75 +1,79 @@
+use crate::processing;
+
 use std::path::PathBuf;
 use std::error::Error;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
-use crate::processing::{Profile, SyncMode};
-
-const PROFILES_CONFIG: &str = "profiles.toml";
-
-pub struct ValidInput {
-    pub profile: Profile,
-    pub sync_mode: SyncMode,
-    pub force: bool,
-    pub rsync_params: String,
+#[derive(Subcommand)]
+enum Command {
+    /// Adds a profile, use add <name> <local-dir> <remote-dir> (optional)--rsync-params <params>
+    Add {
+        name: String,
+        local: PathBuf,
+        remote: PathBuf,
+    },
+    /// Removes a profile, use remove <name>
+    Remove {
+        name: String,
+    },
+    /// Pushes a profile from local to remote, use push <name> (optional)--force
+    Push {
+        name: String,
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+    /// Pulls a profile from target to local, use pull <name> (optional)--force
+    Pull {
+        name: String,
+        #[arg(long, default_value_t = false)]
+        force: bool,
+    },
+    /// Lists all profiles
+    List,
 }
 
-#[derive(Parser, Debug)]
+#[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
-    pub profile: String,
-    #[arg(long, default_value_t = true)]
-    pub push: bool,
-    #[arg(long, default_value_t = false)]
-    pub pull: bool,
-    #[arg(long, default_value_t = false)]
-    pub force: bool,
+    #[command(subcommand)]
+    command: Option<Command>,
+    /// Uses specified config instead of default one
     #[arg(long)]
     pub config: Option<PathBuf>,
-    #[arg(long)]
-    pub rsync_params: Option<String>,
-    #[arg(short, long, default_value_t = false)]
-    pub help: bool,
 }
 
-pub fn validate_args() -> Result<Option<ValidInput>, Box<dyn Error>> {
+pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
     let args = Args::parse();
 
-    if args.help {
-        return Ok(None);
-    }
+    let Some(command) = args.command else { 
+        return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "Missing command, use --help for command list")));
+    };
 
-    let config = args.config.ok_or({
-        match dirs::config_dir() {
-            Some(config_dir) => {
-                let config_file = config_dir;
-                config_file.push(PROFILES_CONFIG);
-                config_file
-            }
-            None => {
+    let config = processing::Config::from(&args.config)?;
+
+    let command = match command {
+        Command::Add { name, local, remote } => {
+            if name == "all" {
                 return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            format!("Config dir not found, specify with --config <config>"))));
+                            std::io::ErrorKind::InvalidInput,
+                            "Cannot use 'all' as profile name")));
             }
+
+            processing::Command::Add(
+                config,
+                processing::Profile::new(
+                    name, local, remote))
         }
+        Command::Remove { name } => processing::Command::Remove(config, name),
+        Command::Push { name, force } =>
+            processing::Command::List(config.get_leaves_profiles()?),
+        Command::Pull { name, force } =>
+            processing::Command::List(config.get_leaves_profiles()?),
+        Command::List => 
+            processing::Command::List(config.get_leaves_profiles()?),
+    };
 
-    });
-    Ok(Some(ValidInput {}))
+    Ok(command)
 }
-
-fn print_usage() {
-    let exe = std::env::args()
-        .next()
-        .unwrap_or_default();
-    println!();
-    println!("Usage: {} <profile>", exe);
-    println!();
-    println!("Options:");
-    println!("\t--push (implicit) syncs profile files from source to target, mutually exclusive with pull");
-    println!("\t--pull syncs profile files from target to source, mutually exclusive with push");
-    println!("\t--force forces operation when destination has newer files");
-    println!("\t--config <config> uses <config> file instead of default ~/.config/ez-sync/profiles.toml");
-    println!("\t--sync-param <params-str> uses <param-str> for rsync instead of default -avh --delete");
-    println!("\t-h / --help prints this help");
-    println!();
-}
-
