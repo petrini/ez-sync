@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::error::Error;
 use clap::{Parser, Subcommand};
 
+const ALL_PROFILES: &str = "all";
+
 #[derive(Subcommand)]
 enum Command {
     /// Adds a profile, use add <name> <local-dir> <remote-dir> (optional)--rsync-params <params>
@@ -55,10 +57,10 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
 
     let command = match command {
         Command::Add { name, local, remote } => {
-            if name == "all" {
+            if name == ALL_PROFILES {
                 return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::InvalidInput,
-                            "Cannot use 'all' as profile name")));
+                            format!("Cannot use '{}' as profile name", ALL_PROFILES))));
             }
 
             processing::Command::Add(
@@ -66,14 +68,58 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                 processing::Profile::new(
                     name, local, remote))
         }
-        Command::Remove { name } => processing::Command::Remove(config, name),
-        Command::Push { name, force } =>
-            processing::Command::List(config.get_leaves_profiles()?),
-        Command::Pull { name, force } =>
-            processing::Command::List(config.get_leaves_profiles()?),
+        Command::Remove { name } => {
+            if name == ALL_PROFILES {
+                return Err(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidInput,
+                            "Cannot delete all profiles. Manually delete the config file instead")));
+            }
+
+            processing::Command::Remove(config, name)
+        }
+        Command::Push { name, force } => {
+            let profiles = if name == ALL_PROFILES {
+                config.get_leaves_profiles()?
+            } else {
+                config.get_profiles(&name)?
+            };
+            let profile_syncs = profiles
+                .into_iter()
+                .map(|p| p.push())
+                .collect();
+            if !force {
+                validate_dates(&profile_syncs)?;
+            };
+
+            processing::Command::Sync(profile_syncs)
+        },
+        Command::Pull { name, force } => {
+            let profiles = if name == ALL_PROFILES {
+                config.get_leaves_profiles()?
+            } else {
+                config.get_profiles(&name)?
+            };
+            let profile_syncs = profiles
+                .into_iter()
+                .map(|p| p.pull())
+                .collect();
+            if !force {
+                validate_dates(&profile_syncs)?;
+            };
+
+            processing::Command::Sync(profile_syncs)
+        },
         Command::List => 
             processing::Command::List(config.get_leaves_profiles()?),
     };
 
     Ok(command)
+}
+
+fn validate_dates(profile_syncs: &Vec<processing::ProfileSync>) -> Result<(), std::io::Error> {
+//    for profile_sync in profile_syncs {
+//        let target_files = walkdir::WalkDir::new(profile_sync.target)
+//            .filter_map(|entry|);
+//    }
+    Ok(())
 }

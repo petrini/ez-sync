@@ -20,8 +20,8 @@ pub struct Profile {
 }
 
 pub struct ProfileSync {
-    source: PathBuf,
-    target: PathBuf,
+    pub source: PathBuf,
+    pub target: PathBuf,
 }
 
 pub enum Command {
@@ -34,6 +34,34 @@ pub enum Command {
 impl Profile {
     pub fn new(name: String, local: PathBuf, remote: PathBuf) -> Self {
         Profile { name, local, remote }
+    }
+
+    pub fn from(name: String, map: &toml::map::Map<String, Value>) -> Result<Self, std::io::Error> {
+        let local = PathBuf::from(map
+            .get("local")
+            .ok_or(std::io::ErrorKind::NotFound)?
+            .as_str()
+            .ok_or(std::io::ErrorKind::NotFound)?);
+        let remote = PathBuf::from(map
+            .get("remote")
+            .ok_or(std::io::ErrorKind::NotFound)?
+            .as_str()
+            .ok_or(std::io::ErrorKind::NotFound)?);
+        Ok(Profile { name, local, remote })
+    }
+
+    pub fn push(self) -> ProfileSync {
+        ProfileSync {
+            source: self.local,
+            target: self.remote,
+        }
+    }
+
+    pub fn pull(self) -> ProfileSync {
+        ProfileSync {
+            source: self.remote,
+            target: self.local,
+        }
     }
 }
 
@@ -77,17 +105,39 @@ impl Config {
         Ok(Config { toml })
     }
 
+    /// Returns a vector with a single profile if its childless or
+    /// with its sub profiles otherwise
+    pub fn get_profiles(&self, name: &String) -> Result<Vec<Profile>, std::io::Error> {
+        let profile_root = self.toml
+            .get(name)
+            .ok_or(std::io::ErrorKind::NotFound)?
+            .as_table()
+            .ok_or(std::io::ErrorKind::NotFound)?;
+        if profile_root.contains_key("local") && profile_root.contains_key("remote") {
+            return Ok(vec![ Profile::from(name.to_string(), profile_root)? ]);
+        }
+
+        let sub_profiles = profile_root
+            .iter()
+            .filter_map(|(name_sub, value_sub)| match value_sub {
+                    Value::Table (map_sub) => {
+                        let name = format!("{}.{}",name.clone(), name_sub.clone());
+                        Some(Profile::from(name, map_sub).ok()?)
+                    },
+                    _ => None,
+            }).collect::<Vec<Profile>>();
+
+        Ok(sub_profiles)
+    }
+
+    /// Returns sub profiles and childless profiles
     pub fn get_leaves_profiles(&self) -> Result<Vec<Profile>, std::io::Error> {
         let profiles_iter = self.toml
             .iter()
             .filter_map(|(name, value)|
                 match value {
                     Value::Table (map) => {
-                        let name = name.clone();
-                        let local = PathBuf::from(map.get("local")?.as_str()?);
-                        let remote = PathBuf::from(map.get("remote")?.as_str()?);
-                        let profile = Profile { name, local, remote };
-                        Some(profile)
+                        Some(Profile::from(name.clone(), map).ok()?)
                     },
                     _ => None,
                 });
@@ -102,10 +152,7 @@ impl Config {
                                 match value_sub {
                                     Value::Table (map_sub) => {
                                         let name = format!("{}.{}",name_root.clone(), name_sub.clone());
-                                        let local = PathBuf::from(map_sub.get("local")?.as_str()?);
-                                        let remote = PathBuf::from(map_sub.get("remote")?.as_str()?);
-                                        let profile = Profile { name, local, remote };
-                                        Some(profile)
+                                        Some(Profile::from(name, map_sub).ok()?)
                                     },
                                     _ => None,
                                 })
