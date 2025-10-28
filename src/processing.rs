@@ -4,6 +4,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::fs::File;
 use toml::{Table, Value};
+use colored::Colorize;
 
 const CONFIG_DIR: &str = "ez-sync";
 const CONFIG_FILE_PROFILES: &str = "profiles.toml";
@@ -77,7 +78,7 @@ impl Config {
     }
 
     pub fn get_leaves_profiles(&self) -> Result<Vec<Profile>, std::io::Error> {
-        Ok(self.toml
+        let profiles_iter = self.toml
             .iter()
             .filter_map(|(name, value)|
                 match value {
@@ -89,7 +90,42 @@ impl Config {
                         Some(profile)
                     },
                     _ => None,
+                });
+        let sub_profiles_iter = self.toml
+            .iter()
+            .filter_map(|(name_root, value_root)|
+                match value_root {
+                    Value::Table (map_root) => {
+                        Some(map_root
+                            .iter()
+                            .filter_map(|(name_sub, value_sub)|
+                                match value_sub {
+                                    Value::Table (map_sub) => {
+                                        let name = format!("{}.{}",name_root.clone(), name_sub.clone());
+                                        let local = PathBuf::from(map_sub.get("local")?.as_str()?);
+                                        let remote = PathBuf::from(map_sub.get("remote")?.as_str()?);
+                                        let profile = Profile { name, local, remote };
+                                        Some(profile)
+                                    },
+                                    _ => None,
+                                })
+                            .collect::<Vec<_>>())
+                    },
+                    _ => None,
                 })
-            .collect())
+            .flatten();
+        Ok(profiles_iter.chain(sub_profiles_iter).collect())
+    }
+}
+
+impl std::fmt::Display for Profile {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f,
+            "[{}] {}: {} {}: {}",
+            self.name.green().bold(),
+            "local".yellow(),
+            self.local.display(),
+            "remote".yellow(),
+            self.remote.display())
     }
 }
