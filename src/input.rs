@@ -2,14 +2,13 @@ use crate::processing;
 
 use std::path::PathBuf;
 use std::error::Error;
-use std::collections::HashMap;
 use clap::{Parser, Subcommand};
 
 const ALL_PROFILES: &str = "all";
 
 #[derive(Subcommand)]
 enum Command {
-    /// Adds a profile, use add <name> <local-dir> <remote-dir> (optional)--rsync-params <params>
+    /// Adds a profile, use add <name> <local-dir> <remote-dir>
     Add {
         name: String,
         local: PathBuf,
@@ -22,14 +21,10 @@ enum Command {
     /// Pushes a profile from local to remote, use push <name> (optional)--force
     Push {
         name: String,
-        #[arg(long, default_value_t = false)]
-        force: bool,
     },
-    /// Pulls a profile from target to local, use pull <name> (optional)--force
+    /// Pulls a profile from target to local, use pull <name>
     Pull {
         name: String,
-        #[arg(long, default_value_t = false)]
-        force: bool,
     },
     /// Lists all profiles
     List,
@@ -78,7 +73,7 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
 
             processing::Command::Remove(config, name)
         }
-        Command::Push { name, force } => {
+        Command::Push { name } => {
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
@@ -88,13 +83,10 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                 .into_iter()
                 .map(|p| p.push())
                 .collect();
-            if !force {
-                validate_dates(&profile_syncs)?;
-            };
 
             processing::Command::Sync(profile_syncs)
         },
-        Command::Pull { name, force } => {
+        Command::Pull { name } => {
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
@@ -104,9 +96,6 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                 .into_iter()
                 .map(|p| p.pull())
                 .collect();
-            if !force {
-                validate_dates(&profile_syncs)?;
-            };
 
             processing::Command::Sync(profile_syncs)
         },
@@ -115,46 +104,4 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
     };
 
     Ok(command)
-}
-
-fn validate_dates(profile_syncs: &Vec<processing::ProfileSync>) -> Result<(), std::io::Error> {
-    for profile_sync in profile_syncs {
-        let target_files = walkdir::WalkDir::new(&profile_sync.target)
-            .into_iter()
-            .filter_map(|entry_res| {
-                let entry = entry_res.ok()?;
-println!("TARGET {:?}", entry.path());
-                Some((entry
-                        .path()
-                        .strip_prefix(&profile_sync.target)
-                        .ok()?
-                        .to_path_buf(),
-                    entry.metadata().ok()?))
-            })
-            .collect::<HashMap<_, _>>();
-        for entry in walkdir::WalkDir::new(&profile_sync.source)
-            .into_iter()
-            .filter_map(|entry_res| entry_res.ok()) {
-                let source_meta = entry.metadata()?;
-                let source_path = entry
-                    .path()
-                    .strip_prefix(&profile_sync.source)
-                    .map_err(|_|
-                        std::io::Error::new(
-                                std::io::ErrorKind::InvalidData,
-                                format!("Error reading path {}", entry.path().display())))?;
-                if let Some(target_meta) = target_files.get(&source_path.to_path_buf()) {
-                    let source_mod = source_meta.modified()?;
-                    let target_mod = target_meta.modified()?;
-                    if source_mod < target_mod {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::PermissionDenied,
-                            format!("Source {} is older than target file, use --force",
-                                entry.path().display())));
-                        }
-                }
-        }
-    }
-
-    Ok(())
 }
