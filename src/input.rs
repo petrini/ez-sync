@@ -2,6 +2,7 @@ use crate::processing;
 
 use std::path::PathBuf;
 use std::error::Error;
+use std::collections::HashMap;
 use clap::{Parser, Subcommand};
 
 const ALL_PROFILES: &str = "all";
@@ -117,9 +118,43 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
 }
 
 fn validate_dates(profile_syncs: &Vec<processing::ProfileSync>) -> Result<(), std::io::Error> {
-//    for profile_sync in profile_syncs {
-//        let target_files = walkdir::WalkDir::new(profile_sync.target)
-//            .filter_map(|entry|);
-//    }
+    for profile_sync in profile_syncs {
+        let target_files = walkdir::WalkDir::new(&profile_sync.target)
+            .into_iter()
+            .filter_map(|entry_res| {
+                let entry = entry_res.ok()?;
+println!("TARGET {:?}", entry.path());
+                Some((entry
+                        .path()
+                        .strip_prefix(&profile_sync.target)
+                        .ok()?
+                        .to_path_buf(),
+                    entry.metadata().ok()?))
+            })
+            .collect::<HashMap<_, _>>();
+        for entry in walkdir::WalkDir::new(&profile_sync.source)
+            .into_iter()
+            .filter_map(|entry_res| entry_res.ok()) {
+                let source_meta = entry.metadata()?;
+                let source_path = entry
+                    .path()
+                    .strip_prefix(&profile_sync.source)
+                    .map_err(|_|
+                        std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                format!("Error reading path {}", entry.path().display())))?;
+                if let Some(target_meta) = target_files.get(&source_path.to_path_buf()) {
+                    let source_mod = source_meta.modified()?;
+                    let target_mod = target_meta.modified()?;
+                    if source_mod < target_mod {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::PermissionDenied,
+                            format!("Source {} is older than target file, use --force",
+                                entry.path().display())));
+                        }
+                }
+        }
+    }
+
     Ok(())
 }
