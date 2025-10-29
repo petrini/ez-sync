@@ -1,4 +1,5 @@
-use crate::processing;
+use crate::profile;
+use crate::config;
 
 use std::path::PathBuf;
 use std::error::Error;
@@ -40,7 +41,7 @@ pub struct Args {
     pub config: Option<PathBuf>,
 }
 
-pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
+pub fn validate_args() -> Result<profile::Command, Box<dyn Error>> {
     let args = Args::parse();
 
     let Some(command) = args.command else { 
@@ -49,7 +50,7 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                     "Missing command, use --help for command list")));
     };
 
-    let config = processing::Config::from(&args.config)?;
+    let config = config::Config::from(&args.config)?;
 
     let command = match command {
         Command::Add { name, local, remote } => {
@@ -59,9 +60,9 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                             format!("Cannot use '{}' as profile name", ALL_PROFILES))));
             }
 
-            processing::Command::Add(
+            profile::Command::Add(
                 config,
-                processing::Profile::new(
+                profile::Profile::new(
                     name, local, remote))
         }
         Command::Remove { name } => {
@@ -71,7 +72,7 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                             "Cannot delete all profiles. Manually delete the config file instead")));
             }
 
-            processing::Command::Remove(config, name)
+            profile::Command::Remove(config, name)
         }
         Command::Push { name } => {
             let profiles = if name == ALL_PROFILES {
@@ -84,7 +85,7 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                 .map(|p| p.push())
                 .collect();
 
-            processing::Command::Sync(profile_syncs)
+            profile::Command::Sync(profile_syncs)
         },
         Command::Pull { name } => {
             let profiles = if name == ALL_PROFILES {
@@ -97,10 +98,10 @@ pub fn validate_args() -> Result<processing::Command, Box<dyn Error>> {
                 .map(|p| p.pull())
                 .collect();
 
-            processing::Command::Sync(profile_syncs)
+            profile::Command::Sync(profile_syncs)
         },
         Command::List => 
-            processing::Command::List(config.get_leaves_profiles()?),
+            profile::Command::List(config.get_leaves_profiles()?),
     };
 
     Ok(command)

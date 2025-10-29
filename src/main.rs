@@ -1,7 +1,8 @@
 mod input;
-mod processing;
+mod config;
+mod profile;
 
-use processing::Command;
+use profile::Command;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match input::validate_args()? {
