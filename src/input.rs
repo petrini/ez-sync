@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 const ALL_PROFILES: &str = "all";
 
 #[derive(Subcommand)]
-enum Command {
+pub enum Command {
     /// Adds a profile, use add <name> <local-dir> <remote-dir>
     Add {
         name: String,
@@ -35,22 +35,22 @@ enum Command {
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     #[command(subcommand)]
-    command: Option<Command>,
+    pub command: Option<Command>,
     /// Uses specified config instead of default one
     #[arg(long)]
     pub config: Option<PathBuf>,
 }
 
-pub fn validate_args() -> Result<profile::Command, Box<dyn Error>> {
-    let args = Args::parse();
+pub fn parse_args() -> Args {
+    Args::parse()
+}
 
-    let Some(command) = args.command else { 
+pub fn validate_command(mut config: config::Config, command: Option<Command>) -> Result<profile::Command, Box<dyn Error>> {
+    let Some(command) = command else { 
         return Err(Box::new(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Missing command, use --help for command list")));
     };
-
-    let config = config::Config::from(&args.config)?;
 
     let command = match command {
         Command::Add { name, local, remote } => {
@@ -62,8 +62,7 @@ pub fn validate_args() -> Result<profile::Command, Box<dyn Error>> {
 
             profile::Command::Add(
                 config,
-                profile::Profile::new(
-                    name, local, remote))
+                profile::Profile { name, local, remote })
         }
         Command::Remove { name } => {
             if name == ALL_PROFILES {

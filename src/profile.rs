@@ -1,12 +1,14 @@
 use crate::config::Config;
 use std::path::PathBuf;
-use toml::Value;
 use colored::Colorize;
 
+pub const LOCAL_K: &str = "local";
+pub const REMOTE_K: &str = "remote";
+
 pub struct Profile {
-    name: String,
-    local: PathBuf,
-    remote: PathBuf,
+    pub name: String,
+    pub local: PathBuf,
+    pub remote: PathBuf,
 }
 
 pub struct ProfileSync {
@@ -22,22 +24,35 @@ pub enum Command {
 }
 
 impl Profile {
-    pub fn new(name: String, local: PathBuf, remote: PathBuf) -> Self {
-        Profile { name, local, remote }
-    }
-
-    pub fn from(name: String, map: &toml::map::Map<String, Value>) -> Result<Self, std::io::Error> {
-        let local = PathBuf::from(map
-            .get("local")
+    pub fn from_table(name: String, table: &toml::Table) -> Result<Self, std::io::Error> {
+        let local = PathBuf::from(table
+            .get(LOCAL_K)
             .ok_or(std::io::ErrorKind::NotFound)?
             .as_str()
             .ok_or(std::io::ErrorKind::NotFound)?);
-        let remote = PathBuf::from(map
-            .get("remote")
+        let remote = PathBuf::from(table
+            .get(REMOTE_K)
             .ok_or(std::io::ErrorKind::NotFound)?
             .as_str()
             .ok_or(std::io::ErrorKind::NotFound)?);
         Ok(Profile { name, local, remote })
+    }
+
+    pub fn to_table(&self) -> Result<toml::Table, std::io::Error> {
+        let mut table = toml::Table::with_capacity(2);
+        table.insert(
+            LOCAL_K.to_string(),
+            toml::Value::String(
+                self.local
+                .display()
+                .to_string()));
+        table.insert(
+            REMOTE_K.to_string(),
+            toml::Value::String(
+                self.remote
+                .display()
+                .to_string()));
+        Ok(table)
     }
 
     pub fn push(self) -> ProfileSync {
@@ -60,9 +75,9 @@ impl std::fmt::Display for Profile {
         write!(f,
             "[{}] {}: {} {}: {}",
             self.name.green().bold(),
-            "local".yellow(),
+            LOCAL_K.yellow(),
             self.local.display(),
-            "remote".yellow(),
+            REMOTE_K.yellow(),
             self.remote.display())
     }
 }
