@@ -2,7 +2,8 @@ mod input;
 mod config;
 mod profile;
 
-use profile::{Profile, Command};
+use std::process;
+use profile::Profile;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = input::parse_args();
@@ -10,7 +11,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = config::Config::load(&config_path)?;
 
     match input::validate_command(config, args.command)? {
-        Command::Add(mut config, mut profile) => {
+        profile::Command::Add(mut config, mut profile) => {
             let full_name = profile.name.clone();
             let profile_split: Vec<_> = profile.name
                 .split(".")
@@ -35,7 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("{}", profile);
             return Ok(())
         }
-        Command::Remove(mut config, profile) => {
+        profile::Command::Remove(mut config, profile) => {
             let profile_split: Vec<_> = profile.split(".").collect();
             let removed_profiles = match profile_split.len() {
                 2 => config.remove_sub_profile(profile_split[0], profile_split[1])?,
@@ -52,11 +53,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             list_profiles(&removed_profiles);
             return Ok(())
         }
-        Command::Sync(profile_syncs) =>
+        profile::Command::Sync(profile_syncs) => {
+            println!("profiles: {}", profile_syncs.len());
             for profile_sync in profile_syncs {
-                println!("SYNC src: {} tgt: {}", profile_sync.source.display(), profile_sync.target.display());
+                let output = process::Command::new("rsync")
+                    .arg("-a")
+                    .arg("-v")
+                    .arg("-h")
+                    .arg("--delete")
+                    .arg("--progress")
+                    .arg(format!("\"{}\"", profile_sync.source.display()))
+                    .arg(format!("\"{}\"", profile_sync.target.display()))
+                    .output()?;
+                println!("{:?}", output);
             }
-        Command::List (profiles) => list_profiles(&profiles),
+        }
+        profile::Command::List (profiles) => list_profiles(&profiles),
     }
 
     Ok(())
