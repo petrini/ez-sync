@@ -2,15 +2,18 @@ mod input;
 mod config;
 mod profile;
 
-use std::process;
+//use std::process;
 use std::time::Duration;
 
 use profile::Profile;
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
 use colored::Colorize;
+use tokio::process;
+use futures::future;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = input::parse_args();
     let config_path = config::get_path(&args.config)?;
     let config = config::Config::load(&config_path)?;
@@ -33,14 +36,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     format!(
                         "Only single and double layered profiles supported, {} is invalid",
                         profile.name)))),
-            };
+            }?;
 
             config.save(config_path)?;
             profile.name = full_name;
             println!("Profile added");
             println!("{}", profile);
-            return Ok(())
-        }
+            Ok(())
+        },
         profile::Command::Remove(mut config, profile) => {
             let profile_split: Vec<_> = profile.split(".").collect();
             let removed_profiles = match profile_split.len() {
@@ -56,42 +59,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             config.save(config_path)?;
             println!("Profile/s removed");
             list_profiles(&removed_profiles);
-            return Ok(())
-        }
+            Ok(())
+        },
         profile::Command::Sync(profile_syncs) => {
             let mp = MultiProgress::new();
-            for profile_sync in profile_syncs {
-                let spinner = ProgressBar::new_spinner();
-                spinner.set_draw_target(ProgressDrawTarget::hidden());
-                spinner.set_prefix(format!("[{}]:", profile_sync.name.to_string().green().bold()));
-                spinner.set_style(
-                    ProgressStyle::default_spinner()
-                        .template("{prefix} {spinner}{msg}")
-                        .expect("Failed to create spinner template"));
-                mp.add(spinner.clone());
-                spinner.enable_steady_tick(Duration::from_millis(100));
-
-                let secs = std::time::Duration::from_millis(2500);
-                std::thread::sleep(secs);
-                process::Command::new("rsync")
-                    .arg("-a")
-                    .arg("--delete")
-                    .arg(format!("{}", profile_sync.source.display()))
-                    .arg(format!("{}", profile_sync.target.display()))
-                    .output()?;
-
-                spinner.finish();
-                spinner.set_message("done");
+            let sync_futures = profile_syncs.into_iter().map(|ps| execute_rsync(ps, &mp)).collect();
+            for result in future::join_all(sync_futures) {
+                if Err(e) == result {
+                    return result;
+                }
             }
-        }
-        profile::Command::List (profiles) => list_profiles(&profiles),
-    }
 
-    Ok(())
+            Ok(())
+        },
+        profile::Command::List (profiles) => {
+            list_profiles(&profiles);
+            Ok(())
+        },
+    }
 }
 
 fn list_profiles(profiles: &Vec<Profile>) {
     for profile in profiles {
         println!("{}", profile);
     }
+}
+
+async fn execute_rsync(profile_sync: &ProfileSync, multi_progress: &MultiProgress) -> Result<(), std::io::Error> {
+    let spinner = ProgressBar::new_spinner();
+    spinner.set_draw_target(ProgressDrawTarget::hidden());
+    spinner.set_prefix(format!("[{}]:", profile_sync.name.to_string().green().bold()));
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+        .template("{prefix} {spinner}{msg}")
+        .expect("Failed to create spinner template"));
+    multi_progress.add(spinner.clone());
+    spinner.enable_steady_tick(Duration::from_millis(100));
+
+    process::Command::new("rsync")
+        .arg("-a")
+        .arg("--delete")
+        .arg(format!("{}", profile_sync.source.display()))
+        .arg(format!("{}", profile_sync.target.display()))
+        .output()
+        .map_err(|e| {
+            spinner.finish();
+            spinner.set_message("failed");
+            Err(e)
+        })?;
+
+    spinner.finish();
+    spinner.set_message("done");
+
+    Ok(())
 }
