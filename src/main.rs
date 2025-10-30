@@ -3,7 +3,12 @@ mod config;
 mod profile;
 
 use std::process;
+use std::time::Duration;
+
 use profile::Profile;
+
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
+use colored::Colorize;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = input::parse_args();
@@ -54,18 +59,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return Ok(())
         }
         profile::Command::Sync(profile_syncs) => {
-            println!("profiles: {}", profile_syncs.len());
+            let mp = MultiProgress::new();
             for profile_sync in profile_syncs {
-                let output = process::Command::new("rsync")
+                let spinner = ProgressBar::new_spinner();
+                spinner.set_draw_target(ProgressDrawTarget::hidden());
+                spinner.set_prefix(format!("[{}]:", profile_sync.name.to_string().green().bold()));
+                spinner.set_style(
+                    ProgressStyle::default_spinner()
+                        .template("{prefix} {spinner}{msg}")
+                        .expect("Failed to create spinner template"));
+                mp.add(spinner.clone());
+                spinner.enable_steady_tick(Duration::from_millis(100));
+
+                let secs = std::time::Duration::from_millis(2500);
+                std::thread::sleep(secs);
+                process::Command::new("rsync")
                     .arg("-a")
-                    .arg("-v")
-                    .arg("-h")
                     .arg("--delete")
-                    .arg("--progress")
-                    .arg(format!("\"{}\"", profile_sync.source.display()))
-                    .arg(format!("\"{}\"", profile_sync.target.display()))
+                    .arg(format!("{}", profile_sync.source.display()))
+                    .arg(format!("{}", profile_sync.target.display()))
                     .output()?;
-                println!("{:?}", output);
+
+                spinner.finish();
+                spinner.set_message("done");
             }
         }
         profile::Command::List (profiles) => list_profiles(&profiles),

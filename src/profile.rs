@@ -12,6 +12,7 @@ pub struct Profile {
 }
 
 pub struct ProfileSync {
+    pub name: String,
     pub source: PathBuf,
     pub target: PathBuf,
 }
@@ -57,6 +58,7 @@ impl Profile {
 
     pub fn push(self) -> ProfileSync {
         ProfileSync {
+            name: self.name,
             source: self.local,
             target: self.remote,
         }
@@ -64,6 +66,7 @@ impl Profile {
 
     pub fn pull(self) -> ProfileSync {
         ProfileSync {
+            name: self.name,
             source: self.remote,
             target: self.local,
         }
