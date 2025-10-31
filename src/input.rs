@@ -2,8 +2,8 @@ use crate::profile;
 use crate::config;
 
 use std::path::PathBuf;
-use std::error::Error;
 use clap::{Parser, Subcommand};
+use anyhow::Result;
 
 const ALL_PROFILES: &str = "all";
 
@@ -45,19 +45,15 @@ pub fn parse_args() -> Args {
     Args::parse()
 }
 
-pub fn validate_command(mut config: config::Config, command: Option<Command>) -> Result<profile::Command, Box<dyn Error>> {
+pub fn validate_command(mut config: config::Config, command: Option<Command>) -> Result<profile::Command> {
     let Some(command) = command else { 
-        return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    "Missing command, use --help for command list")));
+        anyhow::bail!("Missing command, use --help for command list");
     };
 
     let command = match command {
         Command::Add { name, local, remote } => {
             if name == ALL_PROFILES {
-                return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            format!("Cannot use '{}' as profile name", ALL_PROFILES))));
+                anyhow::bail!(format!("Cannot use '{}' as profile name", ALL_PROFILES));
             }
 
             profile::Command::Add(
@@ -66,9 +62,7 @@ pub fn validate_command(mut config: config::Config, command: Option<Command>) ->
         }
         Command::Remove { name } => {
             if name == ALL_PROFILES {
-                return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::InvalidInput,
-                            "Cannot delete all profiles. Manually delete the config file instead")));
+                anyhow::bail!("Cannot delete all profiles. Manually delete the config file instead");
             }
 
             profile::Command::Remove(config, name)

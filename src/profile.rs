@@ -1,6 +1,7 @@
 use crate::config::Config;
 use std::path::PathBuf;
 use colored::Colorize;
+use anyhow::{Context, Result};
 
 pub const LOCAL_K: &str = "local";
 pub const REMOTE_K: &str = "remote";
@@ -25,17 +26,17 @@ pub enum Command {
 }
 
 impl Profile {
-    pub fn from_table(name: String, table: &toml::Table) -> Result<Self, std::io::Error> {
+    pub fn from_table(name: String, table: &toml::Table) -> Result<Self> {
         let local = PathBuf::from(table
             .get(LOCAL_K)
-            .ok_or(std::io::ErrorKind::NotFound)?
+            .context(format!("Key {} not found", LOCAL_K))?
             .as_str()
-            .ok_or(std::io::ErrorKind::NotFound)?);
+            .context(format!("Key {} not a string", LOCAL_K))?);
         let remote = PathBuf::from(table
             .get(REMOTE_K)
-            .ok_or(std::io::ErrorKind::NotFound)?
+            .context(format!("Key {} not found", LOCAL_K))?
             .as_str()
-            .ok_or(std::io::ErrorKind::NotFound)?);
+            .context(format!("Key {} not a string", LOCAL_K))?);
         Ok(Profile { name, local, remote })
     }
 

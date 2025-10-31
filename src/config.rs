@@ -1,10 +1,10 @@
 use std::fs;
 
-use std::error::Error;
 use std::path::PathBuf;
 use std::fs::File;
 use toml::{Table, Value};
 use toml::map::Map;
+use anyhow::{Context, Result};
 
 use crate::profile::{Profile, LOCAL_K, REMOTE_K};
 
@@ -16,14 +16,14 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(path: &PathBuf) -> Result<Self, Box<dyn Error>> {
+    pub fn load(path: &PathBuf) -> Result<Self> {
         let str = std::fs::read_to_string(path)?;
         let toml: Table = str.parse()?;
 
         Ok(Config { toml })
     }
 
-    pub fn save(&self, path: PathBuf) -> Result<(), Box<dyn Error>> {
+    pub fn save(&self, path: PathBuf) -> Result<()> {
         let str = toml::to_string_pretty(&self.toml)?;
         std::fs::write(path, str)?;
 
@@ -32,7 +32,7 @@ impl Config {
 
     /// Returns a vector with a single profile if its childless or
     /// with its sub profiles otherwise
-    pub fn get_profiles(&mut self, name: &String) -> Result<Vec<Profile>, std::io::Error> {
+    pub fn get_profiles(&mut self, name: &String) -> Result<Vec<Profile>> {
         let profile_root = get_sub_table(&mut self.toml, name)?;
         if table_is_leaf(profile_root) {
             return Ok(vec![ Profile::from_table(name.to_string(), profile_root)? ]);
@@ -52,7 +52,7 @@ impl Config {
     }
 
     /// Returns sub profiles and childless profiles
-    pub fn get_leaves_profiles(&self) -> Result<Vec<Profile>, std::io::Error> {
+    pub fn get_leaves_profiles(&self) -> Result<Vec<Profile>> {
         let profiles_iter = self.toml
             .iter()
             .filter_map(|(name, value)|
@@ -87,7 +87,7 @@ impl Config {
 
     pub fn add_root_profile(
         &mut self,
-        profile: &Profile) -> Result<(), std::io::Error> {
+        profile: &Profile) -> Result<()> {
         self.toml
             .insert(
                 profile.name.clone(),
@@ -99,12 +99,10 @@ impl Config {
     pub fn add_sub_profile(
         &mut self,
         name: &str,
-        profile: &Profile) -> Result<(), std::io::Error> {
+        profile: &Profile) -> Result<()> {
         let profile_root = get_sub_table(&mut self.toml, name)?;
         if table_is_leaf(profile_root) {
-            return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Profile {} is leaf", name)));
+            anyhow::bail!(format!("Profile {} is leaf", name));
         };
         profile_root
             .insert(
@@ -116,49 +114,43 @@ impl Config {
 
     pub fn remove_root_profile(
         &mut self,
-        profile: &String) -> Result<Vec<Profile>, std::io::Error> {
+        profile: &String) -> Result<Vec<Profile>> {
         let profiles = self.get_profiles(profile)?;
-        self.toml.remove(profile).ok_or(std::io::ErrorKind::NotFound)?;
+        self.toml.remove(profile).context(format!("Error removing root profile {}", profile))?;
         Ok(profiles)
     }
 
     pub fn remove_sub_profile(
         &mut self,
         root_profile: &str,
-        sub_profile: &str) -> Result<Vec<Profile>, std::io::Error> {
+        sub_profile: &str) -> Result<Vec<Profile>> {
         let profile_root = get_sub_table(&mut self.toml, root_profile)?;
         if table_is_leaf(profile_root) {
-            return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            format!("Profile {} is leaf", root_profile)));
+            anyhow::bail!(format!("Profile {} is leaf", root_profile));
         };
         Ok(vec![Profile::from_table(
                 format!("{}.{}", root_profile, sub_profile),
                 profile_root
                     .remove(sub_profile)
-                    .ok_or(std::io::ErrorKind::NotFound)?
+                    .context(format!("Subprofile {} not found", sub_profile))?
                     .as_table()
-                    .ok_or(std::io::ErrorKind::NotFound)?)?])
+                    .context(format!("Subprofile {} is not a table", sub_profile))?)?])
     }
 }
 
-pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf, Box<dyn Error>> {
+pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf> {
     let config_path = match override_path.clone() {
         Some(path) => path,
         None => {
-            let mut config = dirs::config_dir().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Config dir not found, specify with --config <config>")
-            })?;
+            let mut config = dirs::config_dir().context(
+                "Config dir not found, specify with --config <config>")?;
 
             config.push(CONFIG_DIR);
 
-            fs::create_dir_all(&config).map_err(|_| {
-                std::io::Error::new(
-                    std::io::ErrorKind::PermissionDenied,
-                    format!("Failed to create config folder at {}", &config.display()))
-            })?;
+            fs::create_dir_all(&config).context(
+                format!(
+                    "Failed to create config folder at {}",
+                    &config.display()))?;
 
             config.push(CONFIG_FILE_PROFILES);
             config
@@ -169,9 +161,7 @@ pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf, Box<dyn Erro
         if override_path.is_none() {
             File::create(&config_path)?;
         } else {
-            return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::AlreadyExists,
-                        "Specified config file not found")));
+            anyhow::bail!("Specified config file not found");
         }
     };
 
@@ -180,12 +170,12 @@ pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf, Box<dyn Erro
 
 fn get_sub_table<'a>(
     map: &'a mut Map<String, Value>,
-    name: &str) -> Result<&'a mut Map<String, Value>, std::io::Error> {
-    Ok(map
+    name: &str) -> Result<&'a mut Map<String, Value>> {
+    map
         .get_mut(name)
-        .ok_or(std::io::ErrorKind::NotFound)?
+        .context(format!("Child {} not found", name))?
         .as_table_mut()
-        .ok_or(std::io::ErrorKind::NotFound)?)
+        .context(format!("Child {} not a table", name))
 }
 
 fn table_is_leaf(table: &Map<String, Value>) -> bool {
