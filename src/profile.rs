@@ -1,7 +1,9 @@
-use crate::config::Config;
 use std::path::PathBuf;
+
+use crate::config::Config;
 use colored::Colorize;
 use anyhow::{Context, Result};
+use toml::{Table, Value};
 
 pub const LOCAL_K: &str = "local";
 pub const REMOTE_K: &str = "remote";
@@ -19,42 +21,27 @@ pub struct ProfileSync {
 }
 
 pub enum Command {
-    Add(Config, Profile),
+    Add(Config, String, Table),
     Remove(Config, String),
     Sync(Vec<ProfileSync>),
     List(Vec<Profile>),
 }
 
 impl Profile {
-    pub fn from_table(name: String, table: &toml::Table) -> Result<Self> {
-        let local = PathBuf::from(table
+    pub fn from_table(name: String, table: &Table) -> Result<Self> {
+        let local = PathBuf::from(shellexpand::env(table
             .get(LOCAL_K)
             .context(format!("Key {} not found", LOCAL_K))?
             .as_str()
-            .context(format!("Key {} not a string", LOCAL_K))?);
-        let remote = PathBuf::from(table
+            .context(format!("Key {} not a string", LOCAL_K))?)?
+            .to_string());
+        let remote = PathBuf::from(shellexpand::env(table
             .get(REMOTE_K)
             .context(format!("Key {} not found", LOCAL_K))?
             .as_str()
-            .context(format!("Key {} not a string", LOCAL_K))?);
+            .context(format!("Key {} not a string", LOCAL_K))?)?
+            .to_string());
         Ok(Profile { name, local, remote })
-    }
-
-    pub fn to_table(&self) -> Result<toml::Table, std::io::Error> {
-        let mut table = toml::Table::with_capacity(2);
-        table.insert(
-            LOCAL_K.to_string(),
-            toml::Value::String(
-                self.local
-                .display()
-                .to_string()));
-        table.insert(
-            REMOTE_K.to_string(),
-            toml::Value::String(
-                self.remote
-                .display()
-                .to_string()));
-        Ok(table)
     }
 
     pub fn push(self) -> ProfileSync {
@@ -84,4 +71,16 @@ impl std::fmt::Display for Profile {
             REMOTE_K.yellow(),
             self.remote.display())
     }
+}
+
+pub fn create_profile_table(local: String, remote: String) -> Result<Table> {
+    let mut table = Table::with_capacity(2);
+    table.insert(
+        LOCAL_K.to_string(),
+        Value::String(local));
+    table.insert(
+        REMOTE_K.to_string(),
+        Value::String(remote));
+
+    Ok(table)
 }

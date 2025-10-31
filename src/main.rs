@@ -18,27 +18,24 @@ async fn main() -> Result<(), Error> {
     let config = config::Config::load(&config_path)?;
 
     match input::validate_command(config, args.command)? {
-        profile::Command::Add(mut config, mut profile) => {
-            let full_name = profile.name.clone();
-            let profile_split: Vec<_> = profile.name
-                .split(".")
-                .map(|s| s.to_string())
-                .collect();
+        profile::Command::Add(mut config, profile_name, profile_table) => {
+            let profile_split: Vec<_> = profile_name.split(".").collect();
             match profile_split.len() {
-                2 => {
-                    profile.name = profile_split[1].clone();
-                    config.add_sub_profile(&profile_split[0], &profile)?
-                },
-                1 => config.add_root_profile(&profile)?,
+                2 => config.add_sub_profile(
+                    profile_split[0],
+                    profile_split[1].to_string(),
+                    profile_table)?,
+                1 => config.add_root_profile(
+                    profile_split[0].to_string(),
+                    profile_table)?,
                 _ => anyhow::bail!(format!(
                         "Only single and double layered profiles supported, {} is invalid",
-                        profile.name)),
+                        profile_name)),
             };
 
             config.save(config_path)?;
-            profile.name = full_name;
             println!("Profile added");
-            println!("{}", profile);
+            println!("{}", profile_name);
             Ok(())
         },
         profile::Command::Remove(mut config, profile) => {

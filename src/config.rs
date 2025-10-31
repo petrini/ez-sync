@@ -87,34 +87,34 @@ impl Config {
 
     pub fn add_root_profile(
         &mut self,
-        profile: &Profile) -> Result<()> {
+        name: String,
+        profile: Table) -> Result<()> {
         self.toml
             .insert(
-                profile.name.clone(),
-                toml::Value::Table(
-                    profile.to_table()?));
+                name,
+                toml::Value::Table(profile));
         Ok(())
     }
 
     pub fn add_sub_profile(
         &mut self,
-        name: &str,
-        profile: &Profile) -> Result<()> {
-        if !self.toml.contains_key(name) {
+        name_parent: &str,
+        name: String,
+        profile: Table) -> Result<()> {
+        if !self.toml.contains_key(name_parent) {
             self.toml.insert(
-                name.to_string(),
+                name_parent.to_string(),
                 toml::Value::Table(Table::new()));
         }
 
-        let profile_root = get_sub_table(&mut self.toml, name)?;
+        let profile_root = get_sub_table(&mut self.toml, name_parent)?;
         if table_is_leaf(profile_root) {
-            anyhow::bail!(format!("Profile {} is leaf", name));
+            anyhow::bail!(format!("Profile {} is leaf", name_parent));
         };
         profile_root
             .insert(
-                profile.name.clone(),
-                toml::Value::Table(
-                    profile.to_table()?));
+                name,
+                toml::Value::Table(profile));
         Ok(())
     }
 

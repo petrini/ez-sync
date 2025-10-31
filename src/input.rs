@@ -12,8 +12,8 @@ pub enum Command {
     /// Adds a profile, use add <name> <local-dir> <remote-dir>
     Add {
         name: String,
-        local: PathBuf,
-        remote: PathBuf,
+        local: String,
+        remote: String,
     },
     /// Removes a profile, use remove <name>
     Remove {
@@ -58,7 +58,8 @@ pub fn validate_command(mut config: config::Config, command: Option<Command>) ->
 
             profile::Command::Add(
                 config,
-                profile::Profile { name, local, remote })
+                name,
+                profile::create_profile_table(local, remote)?)
         }
         Command::Remove { name } => {
             if name == ALL_PROFILES {
