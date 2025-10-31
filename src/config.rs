@@ -100,6 +100,12 @@ impl Config {
         &mut self,
         name: &str,
         profile: &Profile) -> Result<()> {
+        if !self.toml.contains_key(name) {
+            self.toml.insert(
+                name.to_string(),
+                toml::Value::Table(Table::new()));
+        }
+
         let profile_root = get_sub_table(&mut self.toml, name)?;
         if table_is_leaf(profile_root) {
             anyhow::bail!(format!("Profile {} is leaf", name));
