@@ -6,7 +6,7 @@ use toml::{Table, Value};
 use toml::map::Map;
 use anyhow::{Context, Result};
 
-use crate::profile::{Profile, LOCAL_K, REMOTE_K};
+use crate::profile::{Profile, ProfileName, LOCAL_K, REMOTE_K};
 
 const CONFIG_DIR: &str = "ez-sync";
 const CONFIG_FILE_PROFILES: &str = "profiles.toml";
@@ -32,6 +32,7 @@ impl Config {
 
     /// Returns a vector with a single profile if its childless or
     /// with its sub profiles otherwise
+    /// #TODO: Bug when pushing / pulling subprofiles
     pub fn get_profiles(&mut self, name: &String) -> Result<Vec<Profile>> {
         let profile_root = get_sub_table(&mut self.toml, name)?;
         if table_is_leaf(profile_root) {
@@ -85,62 +86,62 @@ impl Config {
         Ok(profiles_iter.chain(sub_profiles_iter).collect())
     }
 
-    pub fn add_root_profile(
-        &mut self,
-        name: String,
+    pub fn add_profile(&mut self,
+        name: ProfileName,
         profile: Table) -> Result<()> {
-        self.toml
-            .insert(
-                name,
-                toml::Value::Table(profile));
-        Ok(())
-    }
+        match name {
+            ProfileName::Root(name) => {
+                self.toml.insert(name, toml::Value::Table(profile));
+            }
+            ProfileName::Child(parent_name, name) => {
+                if !self.toml.contains_key(&parent_name) {
+                    self.toml.insert(
+                        parent_name.clone(),
+                        toml::Value::Table(Table::new()));
+                };
 
-    pub fn add_sub_profile(
-        &mut self,
-        name_parent: &str,
-        name: String,
-        profile: Table) -> Result<()> {
-        if !self.toml.contains_key(name_parent) {
-            self.toml.insert(
-                name_parent.to_string(),
-                toml::Value::Table(Table::new()));
-        }
-
-        let profile_root = get_sub_table(&mut self.toml, name_parent)?;
-        if table_is_leaf(profile_root) {
-            anyhow::bail!(format!("Profile {} is leaf", name_parent));
+                let profile_root = get_sub_table(&mut self.toml, &parent_name)?;
+                if table_is_leaf(profile_root) {
+                    anyhow::bail!(format!("Profile {} is leaf", parent_name));
+                };
+                profile_root.insert(name, toml::Value::Table(profile));
+            }
         };
-        profile_root
-            .insert(
-                name,
-                toml::Value::Table(profile));
+
         Ok(())
     }
 
-    pub fn remove_root_profile(
+    pub fn remove_profile(
         &mut self,
-        profile: &String) -> Result<Vec<Profile>> {
-        let profiles = self.get_profiles(profile)?;
-        self.toml.remove(profile).context(format!("Error removing root profile {}", profile))?;
-        Ok(profiles)
+        profile_name: ProfileName) -> Result<Vec<Profile>> {
+        match profile_name {
+            ProfileName::Root(name) => {
+                let profiles = self.get_profiles(&name)?;
+                self.toml.
+                    remove(&name).
+                    context(format!("Error removing root profile {}", name))?;
+                Ok(profiles)
+            }
+            ProfileName::Child(parent_name, name) => {
+                let profile_root = get_sub_table(&mut self.toml, &parent_name)?;
+                if table_is_leaf(profile_root) {
+                    anyhow::bail!(format!("Profile {} is leaf", parent_name));
+                };
+                Ok(vec![Profile::from_table(
+                        profile_name,
+                        profile_root
+                            .remove(&name)
+                            .context(format!("Subprofile {} not found", name))?
+                            .as_table()
+                            .context(format!("Subprofile {} is not a table", name))?)?])
+            }
+        }
     }
 
     pub fn remove_sub_profile(
         &mut self,
         root_profile: &str,
         sub_profile: &str) -> Result<Vec<Profile>> {
-        let profile_root = get_sub_table(&mut self.toml, root_profile)?;
-        if table_is_leaf(profile_root) {
-            anyhow::bail!(format!("Profile {} is leaf", root_profile));
-        };
-        Ok(vec![Profile::from_table(
-                format!("{}.{}", root_profile, sub_profile),
-                profile_root
-                    .remove(sub_profile)
-                    .context(format!("Subprofile {} not found", sub_profile))?
-                    .as_table()
-                    .context(format!("Subprofile {} is not a table", sub_profile))?)?])
     }
 }
 
