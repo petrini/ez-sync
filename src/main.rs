@@ -59,7 +59,7 @@ fn list_profiles(profiles: &Vec<Profile>) {
 async fn execute_rsync(profile_sync: ProfileSync, multi_progress: Arc<MultiProgress>) -> Result<()> {
     let spinner = ProgressBar::new_spinner();
     spinner.set_draw_target(ProgressDrawTarget::hidden());
-    spinner.set_prefix(format!("[{}]:", profile_sync.name.to_string().green().bold()));
+    spinner.set_prefix(format!("[{}]:", profile_sync.name));
     spinner.set_style(
         ProgressStyle::default_spinner()
         .template("{prefix} {spinner}{msg}")
