@@ -72,7 +72,7 @@ pub fn validate_command(config: config::Config, command: Option<Command>) -> Res
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
-                let name = profile::ProfileName::from(name)?;
+                let name = profile::ProfileName::from(&name)?;
                 config.get_profiles(&name)?
             };
             let profile_syncs = profiles
@@ -86,7 +86,7 @@ pub fn validate_command(config: config::Config, command: Option<Command>) -> Res
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
-                let name = profile::ProfileName::from(name)?;
+                let name = profile::ProfileName::from(&name)?;
                 config.get_profiles(&name)?
             };
             let profile_syncs = profiles

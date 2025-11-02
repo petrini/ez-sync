@@ -19,7 +19,7 @@ async fn main() -> Result<(), Error> {
 
     match input::validate_command(config, args.command)? {
         profile::Command::Add(mut config, profile_name, profile_table) => {
-            let name = profile::ProfileName::from(profile_name.clone())?;
+            let name = profile::ProfileName::from(&profile_name)?;
             config.add_profile(name, profile_table)?;
             config.save(config_path)?;
             println!("Profile added");
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Error> {
             Ok(())
         },
         profile::Command::Remove(mut config, profile) => {
-            let name = profile::ProfileName::from(profile)?;
+            let name = profile::ProfileName::from(&profile)?;
             let removed_profiles = config.remove_profile(name)?;
             config.save(config_path)?;
             println!("Profile/s removed");

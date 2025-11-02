@@ -68,7 +68,7 @@ impl Profile {
 }
 
 impl ProfileName {
-    pub fn from(full_name: String) -> Result<Self> {
+    pub fn from(full_name: &str) -> Result<Self> {
         let profile_split: Vec<_> = full_name.split(".").collect();
         match profile_split.len() {
             2 => Ok(ProfileName::Child(profile_split[0].to_owned(), profile_split[1].to_owned())),

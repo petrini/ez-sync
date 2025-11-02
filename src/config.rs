@@ -71,7 +71,7 @@ impl Config {
             .filter_map(|(name, value)|
                 match value {
                     Value::Table (map) => {
-                        let name = ProfileName::from(name.to_owned()).ok()?;
+                        let name = ProfileName::from(&name).ok()?;
                         Some(Profile::from_table(name, map).ok()?)
                     },
                     _ => None,
@@ -90,7 +90,7 @@ impl Config {
                                             "{}.{}",
                                             name_root.clone(),
                                             name_sub.clone());
-                                        let name = ProfileName::from(name).ok()?;
+                                        let name = ProfileName::from(&name).ok()?;
                                         Some(Profile::from_table(name, map_sub).ok()?)
                                     },
                                     _ => None,
@@ -141,7 +141,7 @@ impl Config {
                 Ok(profiles)
             }
             ProfileName::Child(parent_name, name) => {
-                let profile_root = get_sub_table_mut(&mut self.toml, &parent_name)?;
+                let profile_root = get_sub_table_mut(&mut self.toml, parent_name)?;
                 if table_is_leaf(profile_root) {
                     anyhow::bail!(format!("Profile {} is leaf", parent_name));
                 };
