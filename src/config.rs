@@ -159,7 +159,12 @@ impl Config {
 
 pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf> {
     let config_path = match override_path.clone() {
-        Some(path) => path,
+        Some(path) => {
+            if !path.exists() {
+                std::fs::File::create(&path)?;
+            };
+            path
+        }
         None => {
             let mut config = dirs::config_dir().context(
                 "Config dir not found, specify with --config <config>")?;
