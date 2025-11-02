@@ -8,7 +8,6 @@ use std::time::Duration;
 use std::sync::Arc;
 use profile::{Profile, ProfileSync};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
-use colored::Colorize;
 use anyhow::{Error, Result};
 
 #[tokio::main]

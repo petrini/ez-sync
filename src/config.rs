@@ -36,7 +36,7 @@ impl Config {
         match profile_name {
             ProfileName::Root(name) => {
                 let profile_root = get_sub_table(&self.toml, name)?;
-                if table_is_leaf(&profile_root) {
+                if table_is_leaf(profile_root) {
                 return Ok(vec![Profile::from_table(
                     profile_name.clone(),
                     profile_root)?]);
@@ -58,7 +58,7 @@ impl Config {
                 Ok(vec![Profile::from_table(
                     profile_name.clone(),
                     get_sub_table(
-                        &profile_root,
+                        profile_root,
                         name)?)?])
             }
         }
@@ -71,7 +71,7 @@ impl Config {
             .filter_map(|(name, value)|
                 match value {
                     Value::Table (map) => {
-                        let name = ProfileName::from(&name).ok()?;
+                        let name = ProfileName::from(name).ok()?;
                         Some(Profile::from_table(name, map).ok()?)
                     },
                     _ => None,
