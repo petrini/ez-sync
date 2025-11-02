@@ -95,7 +95,8 @@ impl std::fmt::Display for Profile {
 impl std::fmt::Display for ProfileName {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            ProfileName::Root(name) => write!(f, "{}", name),
+            ProfileName::Root(name) =>
+                write!(f, "{}", name.green().bold()),
             ProfileName::Child(parent_name, name) =>
                 write!(
                     f,
