@@ -32,24 +32,36 @@ impl Config {
 
     /// Returns a vector with a single profile if its childless or
     /// with its sub profiles otherwise
-    /// #TODO: Bug when pushing / pulling subprofiles
-    pub fn get_profiles(&mut self, name: &String) -> Result<Vec<Profile>> {
-        let profile_root = get_sub_table(&mut self.toml, name)?;
-        if table_is_leaf(profile_root) {
-            return Ok(vec![ Profile::from_table(name.to_string(), profile_root)? ]);
+    pub fn get_profiles(&self, profile_name: &ProfileName) -> Result<Vec<Profile>> {
+        match profile_name {
+            ProfileName::Root(name) => {
+                let profile_root = get_sub_table(&self.toml, name)?;
+                if table_is_leaf(&profile_root) {
+                return Ok(vec![Profile::from_table(
+                    profile_name.clone(),
+                    profile_root)?]);
+                };
+                
+                Ok(profile_root
+                    .iter()
+                    .filter_map(|(_, value_sub)| match value_sub {
+                        Value::Table (map_sub) => {
+                            Some(Profile::from_table(
+                                    profile_name.clone(),
+                                    map_sub).ok()?)
+                        },
+                        _ => None,
+                    }).collect::<Vec<Profile>>())
+            }
+            ProfileName::Child(parent_name, name) => {
+                let profile_root = get_sub_table(&self.toml, parent_name)?;
+                Ok(vec![Profile::from_table(
+                    profile_name.clone(),
+                    get_sub_table(
+                        &profile_root,
+                        name)?)?])
+            }
         }
-
-        let sub_profiles = profile_root
-            .iter()
-            .filter_map(|(name_sub, value_sub)| match value_sub {
-                    Value::Table (map_sub) => {
-                        let name = format!("{}.{}",name.clone(), name_sub.clone());
-                        Some(Profile::from_table(name, map_sub).ok()?)
-                    },
-                    _ => None,
-            }).collect::<Vec<Profile>>();
-
-        Ok(sub_profiles)
     }
 
     /// Returns sub profiles and childless profiles
@@ -59,7 +71,8 @@ impl Config {
             .filter_map(|(name, value)|
                 match value {
                     Value::Table (map) => {
-                        Some(Profile::from_table(name.clone(), map).ok()?)
+                        let name = ProfileName::from(name.to_owned()).ok()?;
+                        Some(Profile::from_table(name, map).ok()?)
                     },
                     _ => None,
                 });
@@ -73,7 +86,11 @@ impl Config {
                             .filter_map(|(name_sub, value_sub)|
                                 match value_sub {
                                     Value::Table (map_sub) => {
-                                        let name = format!("{}.{}",name_root.clone(), name_sub.clone());
+                                        let name = format!(
+                                            "{}.{}",
+                                            name_root.clone(),
+                                            name_sub.clone());
+                                        let name = ProfileName::from(name).ok()?;
                                         Some(Profile::from_table(name, map_sub).ok()?)
                                     },
                                     _ => None,
@@ -86,7 +103,8 @@ impl Config {
         Ok(profiles_iter.chain(sub_profiles_iter).collect())
     }
 
-    pub fn add_profile(&mut self,
+    pub fn add_profile(
+        &mut self,
         name: ProfileName,
         profile: Table) -> Result<()> {
         match name {
@@ -100,7 +118,7 @@ impl Config {
                         toml::Value::Table(Table::new()));
                 };
 
-                let profile_root = get_sub_table(&mut self.toml, &parent_name)?;
+                let profile_root = get_sub_table_mut(&mut self.toml, &parent_name)?;
                 if table_is_leaf(profile_root) {
                     anyhow::bail!(format!("Profile {} is leaf", parent_name));
                 };
@@ -114,34 +132,28 @@ impl Config {
     pub fn remove_profile(
         &mut self,
         profile_name: ProfileName) -> Result<Vec<Profile>> {
-        match profile_name {
+        match &profile_name {
             ProfileName::Root(name) => {
-                let profiles = self.get_profiles(&name)?;
+                let profiles = self.get_profiles(&profile_name)?;
                 self.toml.
-                    remove(&name).
+                    remove(name).
                     context(format!("Error removing root profile {}", name))?;
                 Ok(profiles)
             }
             ProfileName::Child(parent_name, name) => {
-                let profile_root = get_sub_table(&mut self.toml, &parent_name)?;
+                let profile_root = get_sub_table_mut(&mut self.toml, &parent_name)?;
                 if table_is_leaf(profile_root) {
                     anyhow::bail!(format!("Profile {} is leaf", parent_name));
                 };
                 Ok(vec![Profile::from_table(
-                        profile_name,
-                        profile_root
-                            .remove(&name)
-                            .context(format!("Subprofile {} not found", name))?
-                            .as_table()
-                            .context(format!("Subprofile {} is not a table", name))?)?])
+                    profile_name.clone(),
+                    profile_root
+                        .remove(name)
+                        .context(format!("Subprofile {} not found", name))?
+                        .as_table()
+                        .context(format!("Subprofile {} is not a table", name))?)?])
             }
         }
-    }
-
-    pub fn remove_sub_profile(
-        &mut self,
-        root_profile: &str,
-        sub_profile: &str) -> Result<Vec<Profile>> {
     }
 }
 
@@ -176,6 +188,16 @@ pub fn get_path(override_path: &Option<PathBuf>) -> Result<PathBuf> {
 }
 
 fn get_sub_table<'a>(
+    map: &'a Map<String, Value>,
+    name: &str) -> Result<&'a Map<String, Value>> {
+    map
+        .get(name)
+        .context(format!("Child {} not found", name))?
+        .as_table()
+        .context(format!("Child {} not a table", name))
+}
+
+fn get_sub_table_mut<'a>(
     map: &'a mut Map<String, Value>,
     name: &str) -> Result<&'a mut Map<String, Value>> {
     map

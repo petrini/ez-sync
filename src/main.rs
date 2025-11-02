@@ -19,35 +19,16 @@ async fn main() -> Result<(), Error> {
 
     match input::validate_command(config, args.command)? {
         profile::Command::Add(mut config, profile_name, profile_table) => {
-            let profile_split: Vec<_> = profile_name.split(".").collect();
-            match profile_split.len() {
-                2 => config.add_sub_profile(
-                    profile_split[0],
-                    profile_split[1].to_string(),
-                    profile_table)?,
-                1 => config.add_root_profile(
-                    profile_split[0].to_string(),
-                    profile_table)?,
-                _ => anyhow::bail!(format!(
-                        "Only single and double layered profiles supported, {} is invalid",
-                        profile_name)),
-            };
-
+            let name = profile::ProfileName::from(profile_name.clone())?;
+            config.add_profile(name, profile_table)?;
             config.save(config_path)?;
             println!("Profile added");
             println!("{}", profile_name);
             Ok(())
         },
         profile::Command::Remove(mut config, profile) => {
-            let profile_split: Vec<_> = profile.split(".").collect();
-            let removed_profiles = match profile_split.len() {
-                2 => config.remove_sub_profile(profile_split[0], profile_split[1])?,
-                1 => config.remove_root_profile(&profile)?,
-                _ => anyhow::bail!(format!(
-                        "Only single and double layered profiles supported, {} is invalid",
-                        profile)),
-            };
-
+            let name = profile::ProfileName::from(profile)?;
+            let removed_profiles = config.remove_profile(name)?;
             config.save(config_path)?;
             println!("Profile/s removed");
             list_profiles(&removed_profiles);

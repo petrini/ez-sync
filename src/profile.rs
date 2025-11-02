@@ -27,6 +27,7 @@ pub enum Command {
     List(Vec<Profile>),
 }
 
+#[derive(Clone, Debug)]
 pub enum ProfileName {
     Root(String),
     Child(String, String),

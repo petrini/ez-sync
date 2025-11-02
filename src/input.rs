@@ -45,7 +45,7 @@ pub fn parse_args() -> Args {
     Args::parse()
 }
 
-pub fn validate_command(mut config: config::Config, command: Option<Command>) -> Result<profile::Command> {
+pub fn validate_command(config: config::Config, command: Option<Command>) -> Result<profile::Command> {
     let Some(command) = command else { 
         anyhow::bail!("Missing command, use --help for command list");
     };
@@ -72,6 +72,7 @@ pub fn validate_command(mut config: config::Config, command: Option<Command>) ->
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
+                let name = profile::ProfileName::from(name)?;
                 config.get_profiles(&name)?
             };
             let profile_syncs = profiles
@@ -85,6 +86,7 @@ pub fn validate_command(mut config: config::Config, command: Option<Command>) ->
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
             } else {
+                let name = profile::ProfileName::from(name)?;
                 config.get_profiles(&name)?
             };
             let profile_syncs = profiles
