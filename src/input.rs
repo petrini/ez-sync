@@ -1,9 +1,9 @@
-use crate::profile;
 use crate::config;
+use crate::profile;
 
-use std::path::PathBuf;
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
 const ALL_PROFILES: &str = "all";
 
@@ -16,17 +16,11 @@ pub enum Command {
         remote: String,
     },
     /// Removes a profile, use remove <name>
-    Remove {
-        name: String,
-    },
+    Remove { name: String },
     /// Pushes a profile from local to remote, use push <name> (optional)--force
-    Push {
-        name: String,
-    },
+    Push { name: String },
     /// Pulls a profile from target to local, use pull <name>
-    Pull {
-        name: String,
-    },
+    Pull { name: String },
     /// Lists all profiles
     List,
 }
@@ -45,25 +39,31 @@ pub fn parse_args() -> Args {
     Args::parse()
 }
 
-pub fn validate_command(config: config::Config, command: Option<Command>) -> Result<profile::Command> {
-    let Some(command) = command else { 
+pub fn validate_command(
+    config: config::Config,
+    command: Option<Command>,
+) -> Result<profile::Command> {
+    let Some(command) = command else {
         anyhow::bail!("Missing command, use --help for command list");
     };
 
     let command = match command {
-        Command::Add { name, local, remote } => {
+        Command::Add {
+            name,
+            local,
+            remote,
+        } => {
             if name == ALL_PROFILES {
                 anyhow::bail!(format!("Cannot use '{}' as profile name", ALL_PROFILES));
             }
 
-            profile::Command::Add(
-                config,
-                name,
-                profile::create_profile_table(local, remote)?)
+            profile::Command::Add(config, name, profile::create_profile_table(local, remote)?)
         }
         Command::Remove { name } => {
             if name == ALL_PROFILES {
-                anyhow::bail!("Cannot delete all profiles. Manually delete the config file instead");
+                anyhow::bail!(
+                    "Cannot delete all profiles. Manually delete the config file instead"
+                );
             }
 
             profile::Command::Remove(config, name)
@@ -75,13 +75,10 @@ pub fn validate_command(config: config::Config, command: Option<Command>) -> Res
                 let name = profile::ProfileName::from(&name)?;
                 config.get_profiles(&name)?
             };
-            let profile_syncs = profiles
-                .into_iter()
-                .map(|p| p.push())
-                .collect();
+            let profile_syncs = profiles.into_iter().map(|p| p.push()).collect();
 
             profile::Command::Sync(profile_syncs)
-        },
+        }
         Command::Pull { name } => {
             let profiles = if name == ALL_PROFILES {
                 config.get_leaves_profiles()?
@@ -89,15 +86,11 @@ pub fn validate_command(config: config::Config, command: Option<Command>) -> Res
                 let name = profile::ProfileName::from(&name)?;
                 config.get_profiles(&name)?
             };
-            let profile_syncs = profiles
-                .into_iter()
-                .map(|p| p.pull())
-                .collect();
+            let profile_syncs = profiles.into_iter().map(|p| p.pull()).collect();
 
             profile::Command::Sync(profile_syncs)
-        },
-        Command::List => 
-            profile::Command::List(config.get_leaves_profiles()?),
+        }
+        Command::List => profile::Command::List(config.get_leaves_profiles()?),
     };
 
     Ok(command)

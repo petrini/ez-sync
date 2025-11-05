@@ -1,14 +1,14 @@
-mod input;
 mod config;
+mod input;
 mod profile;
 
 use tokio::process;
 
-use std::time::Duration;
-use std::sync::Arc;
-use profile::{Profile, ProfileSync};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle, ProgressDrawTarget};
 use anyhow::{Error, Result};
+use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use profile::{Profile, ProfileSync};
+use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Error> {
             println!("Profile added");
             println!("{}", profile_name);
             Ok(())
-        },
+        }
         profile::Command::Remove(mut config, profile) => {
             let name = profile::ProfileName::from(&profile)?;
             let removed_profiles = config.remove_profile(name)?;
@@ -32,7 +32,7 @@ async fn main() -> Result<(), Error> {
             println!("Profile/s removed");
             list_profiles(&removed_profiles);
             Ok(())
-        },
+        }
         profile::Command::Sync(profile_syncs) => {
             let mp_arc = Arc::new(MultiProgress::new());
             let mut join_set = tokio::task::JoinSet::new();
@@ -41,11 +41,11 @@ async fn main() -> Result<(), Error> {
             }
             join_set.join_all().await;
             Ok(())
-        },
-        profile::Command::List (profiles) => {
+        }
+        profile::Command::List(profiles) => {
             list_profiles(&profiles);
             Ok(())
-        },
+        }
     }
 }
 
@@ -55,14 +55,18 @@ fn list_profiles(profiles: &Vec<Profile>) {
     }
 }
 
-async fn execute_rsync(profile_sync: ProfileSync, multi_progress: Arc<MultiProgress>) -> Result<()> {
+async fn execute_rsync(
+    profile_sync: ProfileSync,
+    multi_progress: Arc<MultiProgress>,
+) -> Result<()> {
     let spinner = ProgressBar::new_spinner();
     spinner.set_draw_target(ProgressDrawTarget::hidden());
     spinner.set_prefix(format!("[{}]:", profile_sync.name));
     spinner.set_style(
         ProgressStyle::default_spinner()
-        .template("{prefix} {spinner}{msg}")
-        .expect("Failed to create spinner template"));
+            .template("{prefix} {spinner}{msg}")
+            .expect("Failed to create spinner template"),
+    );
     multi_progress.add(spinner.clone());
     spinner.enable_steady_tick(Duration::from_millis(100));
 
@@ -76,8 +80,8 @@ async fn execute_rsync(profile_sync: ProfileSync, multi_progress: Arc<MultiProgr
 
     spinner.finish();
     match result {
-       Ok(_) => spinner.set_message("done"),
-       Err(_) => spinner.set_message("failed"),
+        Ok(_) => spinner.set_message("done"),
+        Err(_) => spinner.set_message("failed"),
     };
 
     Ok(())
