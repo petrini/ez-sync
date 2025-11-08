@@ -45,9 +45,13 @@ impl Config {
 
                 Ok(profile_root
                     .iter()
-                    .filter_map(|(_, value_sub)| match value_sub {
+                    .filter_map(|(key_sub, value_sub)| match value_sub {
                         Value::Table(map_sub) => {
-                            Some(Profile::from_table(profile_name.clone(), map_sub).ok()?)
+                            let name = ProfileName::from(
+                                &format!("{}.{}", name, key_sub)).ok()?;
+                            Some(Profile::from_table(
+                                    name,
+                                    map_sub).ok()?)
                         }
                         _ => None,
                     })
