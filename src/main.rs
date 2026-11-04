@@ -37,6 +37,13 @@ async fn main() -> Result<(), Error> {
             let mp_arc = Arc::new(MultiProgress::new());
             let mut join_set = tokio::task::JoinSet::new();
             for ps in profile_syncs {
+                if !ps.source.to_string_lossy().ends_with('/') {
+                    eprintln!(
+                        "warning: [{}] source '{}' has no trailing slash, rsync will copy the directory itself into the target instead of mirroring its contents",
+                        ps.name,
+                        ps.source.display()
+                    );
+                }
                 join_set.spawn(execute_rsync(ps, Arc::clone(&mp_arc)));
             }
             let mut failures: Vec<String> = Vec::new();
@@ -85,7 +92,7 @@ async fn execute_rsync(
 
     let result = process::Command::new("rsync")
         .arg("-a")
-        .arg("--delete")
+        .arg("--delete-after")
         .arg(format!("{}", profile_sync.source.display()))
         .arg(format!("{}", profile_sync.target.display()))
         .output()
