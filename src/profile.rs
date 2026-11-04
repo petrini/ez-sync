@@ -128,3 +128,69 @@ pub fn create_profile_table(local: String, remote: String) -> Result<Table> {
 
     Ok(table)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn table(local: &str, remote: &str) -> Table {
+        create_profile_table(local.to_string(), remote.to_string()).unwrap()
+    }
+
+    #[test]
+    fn name_root_and_child() {
+        assert!(matches!(ProfileName::from("a").unwrap(), ProfileName::Root(n) if n == "a"));
+        assert!(
+            matches!(ProfileName::from("a.b").unwrap(), ProfileName::Child(p, c) if p == "a" && c == "b")
+        );
+    }
+
+    #[test]
+    fn name_rejects_three_levels() {
+        assert!(ProfileName::from("a.b.c").is_err());
+    }
+
+    #[test]
+    fn from_table_reads_paths() {
+        let p = Profile::from_table(ProfileName::from("x").unwrap(), &table("/l/", "/r")).unwrap();
+        assert_eq!(p.local, PathBuf::from("/l/"));
+        assert_eq!(p.remote, PathBuf::from("/r"));
+    }
+
+    #[test]
+    fn from_table_expands_env() {
+        // PATH is always set, so expansion must succeed and drop the `$`
+        let p = Profile::from_table(ProfileName::from("x").unwrap(), &table("$PATH/l", "/r"))
+            .unwrap();
+        assert!(!p.local.to_string_lossy().contains('$'));
+    }
+
+    #[test]
+    fn from_table_fails_on_unset_env_var() {
+        let t = table("$EZ_SYNC_SURELY_UNSET_VAR/l", "/r");
+        assert!(Profile::from_table(ProfileName::from("x").unwrap(), &t).is_err());
+    }
+
+    #[test]
+    fn from_table_requires_both_keys() {
+        let mut t = Table::new();
+        t.insert(LOCAL_K.to_string(), Value::String("/l".into()));
+        assert!(Profile::from_table(ProfileName::from("x").unwrap(), &t).is_err());
+    }
+
+    #[test]
+    fn push_goes_local_to_remote() {
+        let p = Profile::from_table(ProfileName::from("x").unwrap(), &table("/l", "/r")).unwrap();
+        let s = p.push();
+        assert_eq!(s.source, PathBuf::from("/l"));
+        assert_eq!(s.target, PathBuf::from("/r"));
+    }
+
+    #[test]
+    fn pull_goes_remote_to_local() {
+        let p = Profile::from_table(ProfileName::from("x").unwrap(), &table("/l", "/r")).unwrap();
+        let s = p.pull();
+        assert_eq!(s.source, PathBuf::from("/r"));
+        assert_eq!(s.target, PathBuf::from("/l"));
+    }
+}

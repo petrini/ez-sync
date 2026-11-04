@@ -17,7 +17,7 @@ cargo clippy               # Lint
 cargo run -- <args>        # Run directly
 ```
 
-There are currently no automated tests.
+Run tests with `cargo test` (requires `rsync` installed). Unit tests live inline in `profile.rs` and `config.rs`; end-to-end tests in `tests/cli.rs` run the real binary against real rsync on temp dirs.
 
 ## Architecture
 
@@ -35,7 +35,7 @@ The project has four modules:
 
 ## Key Behaviors
 
-- Rsync is invoked with `-a --delete` (archive mode, remove files absent from source).
+- Rsync is invoked with `-a --delete-after` (archive mode, remove files absent from source only after the transfer). A non-zero rsync exit is reported per profile on stderr and makes ez-sync exit 1. A warning is printed when a source path lacks a trailing slash.
 - Paths support environment variable expansion (e.g. `$HOME/...`).
 - Profile hierarchy is exactly one level deep: root profiles and their direct children.
 - `all` as the profile argument syncs every leaf profile, even across different parents.

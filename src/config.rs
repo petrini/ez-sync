@@ -203,3 +203,113 @@ fn get_sub_table_mut<'a>(
 fn table_is_leaf(table: &Map<String, Value>) -> bool {
     table.contains_key(LOCAL_K) && table.contains_key(REMOTE_K)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::profile::create_profile_table;
+
+    fn name(s: &str) -> ProfileName {
+        ProfileName::from(s).unwrap()
+    }
+
+    fn add(config: &mut Config, n: &str) {
+        let t = create_profile_table(format!("/l/{n}"), format!("/r/{n}")).unwrap();
+        config.add_profile(name(n), t).unwrap();
+    }
+
+    fn empty() -> Config {
+        Config { toml: Table::new() }
+    }
+
+    fn names(profiles: &[Profile]) -> Vec<String> {
+        let mut v: Vec<_> = profiles
+            .iter()
+            .map(|p| match &p.name {
+                ProfileName::Root(n) => n.clone(),
+                ProfileName::Child(a, b) => format!("{a}.{b}"),
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn root_profile_roundtrip() {
+        let mut c = empty();
+        add(&mut c, "docs");
+        let got = c.get_profiles(&name("docs")).unwrap();
+        assert_eq!(names(&got), ["docs"]);
+        assert_eq!(got[0].local, PathBuf::from("/l/docs"));
+    }
+
+    #[test]
+    fn parent_returns_all_children() {
+        let mut c = empty();
+        add(&mut c, "p.a");
+        add(&mut c, "p.b");
+        assert_eq!(names(&c.get_profiles(&name("p")).unwrap()), ["p.a", "p.b"]);
+        assert_eq!(names(&c.get_profiles(&name("p.a")).unwrap()), ["p.a"]);
+    }
+
+    #[test]
+    fn missing_profile_is_error() {
+        assert!(empty().get_profiles(&name("nope")).is_err());
+    }
+
+    #[test]
+    fn cannot_add_child_under_leaf() {
+        let mut c = empty();
+        add(&mut c, "leaf");
+        let t = create_profile_table("/l".into(), "/r".into()).unwrap();
+        assert!(c.add_profile(name("leaf.child"), t).is_err());
+    }
+
+    #[test]
+    fn leaves_span_parents_and_exclude_parents() {
+        let mut c = empty();
+        add(&mut c, "solo");
+        add(&mut c, "p.a");
+        add(&mut c, "q.b");
+        assert_eq!(
+            names(&c.get_leaves_profiles().unwrap()),
+            ["p.a", "q.b", "solo"]
+        );
+    }
+
+    #[test]
+    fn remove_root_returns_removed_children() {
+        let mut c = empty();
+        add(&mut c, "p.a");
+        add(&mut c, "p.b");
+        let removed = c.remove_profile(name("p")).unwrap();
+        assert_eq!(names(&removed), ["p.a", "p.b"]);
+        assert!(c.get_profiles(&name("p")).is_err());
+    }
+
+    #[test]
+    fn remove_child_keeps_siblings() {
+        let mut c = empty();
+        add(&mut c, "p.a");
+        add(&mut c, "p.b");
+        c.remove_profile(name("p.a")).unwrap();
+        assert_eq!(names(&c.get_leaves_profiles().unwrap()), ["p.b"]);
+    }
+
+    #[test]
+    fn remove_missing_child_is_error() {
+        let mut c = empty();
+        add(&mut c, "p.a");
+        assert!(c.remove_profile(name("p.zzz")).is_err());
+    }
+
+    #[test]
+    fn table_is_leaf_needs_both_keys() {
+        let mut t = Table::new();
+        assert!(!table_is_leaf(&t));
+        t.insert(LOCAL_K.into(), Value::String("a".into()));
+        assert!(!table_is_leaf(&t));
+        t.insert(REMOTE_K.into(), Value::String("b".into()));
+        assert!(table_is_leaf(&t));
+    }
+}
