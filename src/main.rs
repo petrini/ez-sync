@@ -4,7 +4,7 @@ mod profile;
 
 use tokio::process;
 
-use anyhow::{Error, Result};
+use anyhow::{Error, Result, anyhow};
 use indicatif::{MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use profile::{Profile, ProfileSync};
 use std::sync::Arc;
@@ -39,7 +39,20 @@ async fn main() -> Result<(), Error> {
             for ps in profile_syncs {
                 join_set.spawn(execute_rsync(ps, Arc::clone(&mp_arc)));
             }
-            join_set.join_all().await;
+            let mut failures: Vec<String> = Vec::new();
+            while let Some(joined) = join_set.join_next().await {
+                match joined {
+                    Ok(Ok(())) => {}
+                    Ok(Err(e)) => failures.push(e.to_string()),
+                    Err(e) => failures.push(format!("sync task aborted: {}", e)),
+                }
+            }
+            if !failures.is_empty() {
+                for failure in &failures {
+                    eprintln!("{}", failure);
+                }
+                std::process::exit(1);
+            }
             Ok(())
         }
         profile::Command::List(profiles) => {
@@ -78,11 +91,27 @@ async fn execute_rsync(
         .output()
         .await;
 
-    spinner.finish();
-    match result {
-        Ok(_) => spinner.set_message("done"),
-        Err(_) => spinner.set_message("failed"),
+    let outcome = match result {
+        Err(e) => Err(anyhow!(
+            "[{}] failed to launch rsync: {}",
+            profile_sync.name,
+            e
+        )),
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(output) => {
+            let code = output
+                .status
+                .code()
+                .map_or("killed by signal".to_string(), |c| format!("exit {}", c));
+            Err(anyhow!(
+                "[{}] rsync failed ({}): {}",
+                profile_sync.name,
+                code,
+                String::from_utf8_lossy(&output.stderr).trim()
+            ))
+        }
     };
 
-    Ok(())
+    spinner.finish_with_message(if outcome.is_ok() { "done" } else { "failed" });
+    outcome
 }
